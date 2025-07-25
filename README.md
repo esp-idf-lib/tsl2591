@@ -1,5 +1,9 @@
 # esp-idf-lib/tsl2591
 
+[![Build examples](https://github.com/esp-idf-lib/tsl2591/actions/workflows//build.yml/badge.svg)](https://github.com/esp-idf-lib/tsl2591/actions/workflows//build.yml)
+[![Build docs](https://github.com/esp-idf-lib/tsl2591/actions/workflows//build-docs.yml/badge.svg)](https://github.com/esp-idf-lib/tsl2591/actions/workflows//build-docs.yml)
+[![Validation](https://github.com/esp-idf-lib/tsl2591/actions/workflows//validate-component.yml/badge.svg)](https://github.com/esp-idf-lib/tsl2591/actions/workflows//validate-component.yml)
+
 Driver for light-to-digital converter TSL2591.
 
 * [Documentation](https://esp-idf-lib.github.io/tsl2591/)
@@ -11,7 +15,7 @@ Driver for light-to-digital converter TSL2591.
 ## Installation
 
 ```sh
-idf.py add-dependency esp-idf-lib/tsl2591^1.0.0
+idf.py add-dependency esp-idf-lib/tsl2591
 ```
 
 ## Support
