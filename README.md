@@ -11,7 +11,7 @@ Driver for light-to-digital converter TSL2591.
 ## Installation
 
 ```sh
-idf.py add-dependency "esp-idf-lib/tsl2591^1.0.0
+idf.py add-dependency esp-idf-lib/tsl2591^1.0.0
 ```
 
 ## Support
