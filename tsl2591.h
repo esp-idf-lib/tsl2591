@@ -26,7 +26,7 @@
  * @defgroup tsl2591 tsl2591
  * @{
  *
- * ESP-IDF driver for TSL2591 light-to-digital. 
+ * ESP-IDF driver for TSL2591 light-to-digital.
  *
  * Copyright (c) 2020 Julian Doerner <https://github.com/juliandoerner>
  *
@@ -64,7 +64,7 @@ typedef enum
 } tsl2591_als_status_t;
 
 /**
- * Interrupts. TSL2591 has two interrupt sources. 
+ * Interrupts. TSL2591 has two interrupt sources.
  * Check the datasheet for details.
  */
 typedef enum
@@ -76,7 +76,7 @@ typedef enum
 } tsl2591_interrupt_t;
 
 /**
- * Interrupt sleep setting. 
+ * Interrupt sleep setting.
  */
 typedef enum
 {
@@ -89,12 +89,12 @@ typedef enum
  */
 typedef enum
 {
-    TSL2591_INTEGRATION_100MS = 0, //!< Default 
-    TSL2591_INTEGRATION_200MS,      
-    TSL2591_INTEGRATION_300MS,      
-    TSL2591_INTEGRATION_400MS,      
-    TSL2591_INTEGRATION_500MS,      
-    TSL2591_INTEGRATION_600MS       
+    TSL2591_INTEGRATION_100MS = 0, //!< Default
+    TSL2591_INTEGRATION_200MS,
+    TSL2591_INTEGRATION_300MS,
+    TSL2591_INTEGRATION_400MS,
+    TSL2591_INTEGRATION_500MS,
+    TSL2591_INTEGRATION_600MS
 } tsl2591_integration_time_t;
 
 /**
@@ -313,7 +313,7 @@ esp_err_t tsl2591_get_gain(tsl2591_t *dev, tsl2591_gain_t *gain);
  * @brief Set device persistence filter
  *
  * @param dev Device descriptor
- * @param filter Persistence filter 
+ * @param filter Persistence filter
  * @return `ESP_OK` on success
  */
 esp_err_t tsl2591_set_persistence_filter(tsl2591_t *dev, tsl2591_persistence_filter_t filter);

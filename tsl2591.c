@@ -73,7 +73,7 @@ static const char *TAG = "tsl2591";
 // TSL2591 status flags.
 #define TSL2591_STATUS_ALS_INTR     0x10
 #define TSL2591_STATUS_ALS_NP_INTR  0x20
-#define TSL2591_STATUS_ALS_VALID    0x01  
+#define TSL2591_STATUS_ALS_VALID    0x01
 
 // Calculation constants.
 #define TSL2591_LUX_DF 408.0F
@@ -82,7 +82,8 @@ static const char *TAG = "tsl2591";
 #define CHECK_ARG(VAL) do { if (!(VAL)) return ESP_ERR_INVALID_ARG; } while (0)
 #define SLEEP_MS(x) do { vTaskDelay(pdMS_TO_TICKS(x)); } while (0)
 
-static const uint32_t integration_time_ms[] = {
+static const uint32_t integration_time_ms[] =
+{
     [TSL2591_INTEGRATION_100MS] = 100,
     [TSL2591_INTEGRATION_200MS] = 200,
     [TSL2591_INTEGRATION_300MS] = 300,
@@ -95,15 +96,15 @@ static const uint32_t integration_time_ms[] = {
 static inline esp_err_t write_register(tsl2591_t *dev, uint8_t reg, uint8_t value)
 {
     ESP_LOGD(TAG, "Writing register: 0x%x; Data: 0x%x.", reg, value);
-    return i2c_dev_write_reg(&dev->i2c_dev, 
-        TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | reg, &value, 1);
+    return i2c_dev_write_reg(&dev->i2c_dev,
+                             TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | reg, &value, 1);
 }
 
 static inline esp_err_t read_register(tsl2591_t *dev, uint8_t reg, uint8_t *value)
 {
     esp_err_t err;
-    err = i2c_dev_read_reg(&dev->i2c_dev, 
-        TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | reg, value, 1);
+    err = i2c_dev_read_reg(&dev->i2c_dev,
+                           TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | reg, value, 1);
     ESP_LOGD(TAG, "Red register: 0x%x; Data: 0x%x.", reg, *value);
     return err;
 }
@@ -139,12 +140,12 @@ static inline esp_err_t read_control_register(tsl2591_t *dev, uint8_t *value)
 }
 
 // Read 16 bit from two consecutive registers.
-// Note that the sensor will shadow for example C0DATAH if C0DATAL is read. 
+// Note that the sensor will shadow for example C0DATAH if C0DATAL is read.
 static inline esp_err_t read_register16(tsl2591_t *dev, uint8_t low_register, uint16_t *value)
 {
     uint8_t buf[2];
-    CHECK(i2c_dev_read_reg(&dev->i2c_dev, 
-        TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | low_register, buf, 2));
+    CHECK(i2c_dev_read_reg(&dev->i2c_dev,
+                           TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | low_register, buf, 2));
     *value = (uint16_t)buf[1] << 8 | buf[0];
 
     return ESP_OK;
@@ -221,7 +222,7 @@ esp_err_t tsl2591_get_channel_data(tsl2591_t *dev, uint16_t *channel0, uint16_t 
 
     I2C_DEV_CHECK(&dev->i2c_dev, read_register16(dev, TSL2591_REG_C0DATAL, channel0));
     I2C_DEV_CHECK(&dev->i2c_dev, read_register16(dev, TSL2591_REG_C1DATAL, channel1));
-    
+
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
     ESP_LOGD(TAG, "channel0: 0x%x channel1: 0x%x.", *channel0, *channel1);
 
@@ -269,7 +270,7 @@ esp_err_t tsl2591_get_lux(tsl2591_t *dev, float *lux)
 
     uint16_t channel0, channel1;
     CHECK(tsl2591_get_channel_data(dev, &channel0, &channel1));
-    
+
     return tsl2591_calculate_lux(dev, channel0, channel1, lux);
 }
 
@@ -280,8 +281,8 @@ esp_err_t tsl2591_set_power_status(tsl2591_t *dev, tsl2591_power_status_t power_
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, 
-        write_enable_register(dev, (dev->settings.enable_reg & ~TSL2591_POWER_ON) | power_status));
+    I2C_DEV_CHECK(&dev->i2c_dev,
+                  write_enable_register(dev, (dev->settings.enable_reg & ~TSL2591_POWER_ON) | power_status));
     dev->settings.enable_reg = (dev->settings.enable_reg & ~TSL2591_POWER_ON) | power_status;
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
@@ -304,8 +305,8 @@ esp_err_t tsl2591_set_als_status(tsl2591_t *dev, tsl2591_als_status_t als_status
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, 
-        write_enable_register(dev, (dev->settings.enable_reg & ~TSL2591_ALS_ON) | als_status));
+    I2C_DEV_CHECK(&dev->i2c_dev,
+                  write_enable_register(dev, (dev->settings.enable_reg & ~TSL2591_ALS_ON) | als_status));
     dev->settings.enable_reg = (dev->settings.enable_reg & ~TSL2591_ALS_ON) | als_status;
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
@@ -329,12 +330,12 @@ esp_err_t tsl2591_set_interrupt(tsl2591_t *dev, tsl2591_interrupt_t interrupt)
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
     I2C_DEV_CHECK(&dev->i2c_dev,
-        write_enable_register(dev, (dev->settings.enable_reg & ~TSL2591_ALS_INTR_BOTH_ON) | interrupt));
-    dev->settings.enable_reg = (dev->settings.enable_reg & ~TSL2591_ALS_INTR_BOTH_ON) | interrupt; 
+                  write_enable_register(dev, (dev->settings.enable_reg & ~TSL2591_ALS_INTR_BOTH_ON) | interrupt));
+    dev->settings.enable_reg = (dev->settings.enable_reg & ~TSL2591_ALS_INTR_BOTH_ON) | interrupt;
 
     uint8_t tmp = 0;
     I2C_DEV_CHECK(&dev->i2c_dev,
-        read_enable_register(dev, &tmp));
+                  read_enable_register(dev, &tmp));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -357,8 +358,8 @@ esp_err_t tsl2591_set_sleep_after_intr(tsl2591_t *dev, tsl2591_sleep_after_intr_
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
     I2C_DEV_CHECK(&dev->i2c_dev,
-        write_enable_register(dev, (dev->settings.enable_reg & ~TSL2591_SLEEP_AFTER_ON) | sleep_after_intr));
-    dev->settings.enable_reg = (dev->settings.enable_reg & ~TSL2591_SLEEP_AFTER_ON) | sleep_after_intr; 
+                  write_enable_register(dev, (dev->settings.enable_reg & ~TSL2591_SLEEP_AFTER_ON) | sleep_after_intr));
+    dev->settings.enable_reg = (dev->settings.enable_reg & ~TSL2591_SLEEP_AFTER_ON) | sleep_after_intr;
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -384,7 +385,7 @@ esp_err_t tsl2591_set_integration_time(tsl2591_t *dev, tsl2591_integration_time_
 
     // Last 3 bits represent the integration time.
     I2C_DEV_CHECK(&dev->i2c_dev,
-        write_control_register(dev, (dev->settings.control_reg & ~0x07) | integration_time));
+                  write_control_register(dev, (dev->settings.control_reg & ~0x07) | integration_time));
     dev->settings.control_reg = (dev->settings.control_reg & ~0x07) | integration_time;
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
@@ -408,8 +409,8 @@ esp_err_t tsl2591_set_gain(tsl2591_t *dev, tsl2591_gain_t gain)
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, 
-        write_control_register(dev, (dev->settings.control_reg & ~TSL2591_GAIN_MAX) | gain));
+    I2C_DEV_CHECK(&dev->i2c_dev,
+                  write_control_register(dev, (dev->settings.control_reg & ~TSL2591_GAIN_MAX) | gain));
     dev->settings.control_reg = (dev->settings.control_reg & ~TSL2591_GAIN_MAX) | gain;
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
@@ -434,8 +435,8 @@ esp_err_t tsl2591_set_persistence_filter(tsl2591_t *dev, tsl2591_persistence_fil
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, 
-        write_register(dev, TSL2591_REG_PERSIST, (dev->settings.persistence_reg & ~TSL2591_60_CYCLES) | filter));
+    I2C_DEV_CHECK(&dev->i2c_dev,
+                  write_register(dev, TSL2591_REG_PERSIST, (dev->settings.persistence_reg & ~TSL2591_60_CYCLES) | filter));
     dev->settings.persistence_reg = (dev->settings.persistence_reg & ~TSL2591_60_CYCLES) | filter;
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
@@ -519,7 +520,7 @@ esp_err_t tsl2591_set_test_intr(tsl2591_t *dev)
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
     I2C_DEV_CHECK(&dev->i2c_dev,
-        write_special_function(dev, TSL2591_SPECIAL_SET_INTR));
+                  write_special_function(dev, TSL2591_SPECIAL_SET_INTR));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -533,7 +534,7 @@ esp_err_t tsl2591_clear_als_intr(tsl2591_t *dev)
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
     I2C_DEV_CHECK(&dev->i2c_dev,
-        write_special_function(dev, TSL2591_SPECIAL_CLEAR_INTR));
+                  write_special_function(dev, TSL2591_SPECIAL_CLEAR_INTR));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -547,7 +548,7 @@ esp_err_t tsl2591_clear_als_np_intr(tsl2591_t *dev)
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
     I2C_DEV_CHECK(&dev->i2c_dev,
-        write_special_function(dev, TSL2591_SPECIAL_CLEAR_NP_INTR));
+                  write_special_function(dev, TSL2591_SPECIAL_CLEAR_NP_INTR));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -561,7 +562,7 @@ esp_err_t tsl2591_clear_both_intr(tsl2591_t *dev)
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
     I2C_DEV_CHECK(&dev->i2c_dev,
-        write_special_function(dev, TSL2591_SPECIAL_CLEAR_BOTH));
+                  write_special_function(dev, TSL2591_SPECIAL_CLEAR_BOTH));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -573,14 +574,14 @@ esp_err_t tsl2591_clear_both_intr(tsl2591_t *dev)
 esp_err_t tsl2591_get_np_intr_flag(tsl2591_t *dev, bool *flag)
 {
     CHECK_ARG(dev && flag);
-    
+
     uint8_t tmp;
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
     I2C_DEV_CHECK(&dev->i2c_dev,
-        read_register(dev, TSL2591_REG_STATUS, &tmp));
-    
+                  read_register(dev, TSL2591_REG_STATUS, &tmp));
+
     *flag = tmp & TSL2591_STATUS_ALS_NP_INTR ? true : false;
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
@@ -591,14 +592,14 @@ esp_err_t tsl2591_get_np_intr_flag(tsl2591_t *dev, bool *flag)
 esp_err_t tsl2591_get_als_intr_flag(tsl2591_t *dev, bool *flag)
 {
     CHECK_ARG(dev && flag);
-    
+
     uint8_t tmp;
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
     I2C_DEV_CHECK(&dev->i2c_dev,
-        read_register(dev, TSL2591_REG_STATUS, &tmp));
-    
+                  read_register(dev, TSL2591_REG_STATUS, &tmp));
+
     *flag = tmp & TSL2591_STATUS_ALS_INTR ? true : false;
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
@@ -609,15 +610,15 @@ esp_err_t tsl2591_get_als_intr_flag(tsl2591_t *dev, bool *flag)
 esp_err_t tsl2591_get_als_valid_flag(tsl2591_t *dev, bool *flag)
 {
     CHECK_ARG(dev && flag);
-    
+
     uint8_t tmp;
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
     I2C_DEV_CHECK(&dev->i2c_dev,
-        read_register(dev, TSL2591_REG_STATUS, &tmp));
-    
-    *flag = tmp & TSL2591_STATUS_ALS_VALID? true : false;
+                  read_register(dev, TSL2591_REG_STATUS, &tmp));
+
+    *flag = tmp & TSL2591_STATUS_ALS_VALID ? true : false;
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
