@@ -106,7 +106,7 @@ static inline esp_err_t read_register(tsl2591_t *dev, uint8_t reg, uint8_t *valu
     esp_err_t err;
     err = i2c_dev_read_reg(&dev->i2c_dev,
                            TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | reg, value, 1);
-    ESP_LOGD(TAG, "Red register: 0x%x; Data: 0x%x.", reg, *value);
+    ESP_LOGD(TAG, "Read register: 0x%x; Data: 0x%x.", reg, *value);
     return err;
 }
 
