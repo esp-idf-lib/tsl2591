@@ -199,9 +199,11 @@ esp_err_t tsl2591_get_channel_data(tsl2591_t *dev, uint16_t *channel0, uint16_t 
  * @param[out] lux Light intensity
  * @return `ESP_OK` on success
  *
- * @note The light intensity is NaN if channel 0 is zero or if either channel is
- *       saturated. The maximum count depends on the integration time: 36863
- *       for 100 ms and 65535 for the longer ones.
+ * @note The light intensity is zero if both channels are zero, which is the
+ *       case in the dark. It is NaN if channel 0 is zero while channel 1 is
+ *       not, or if either channel is saturated: the maximum count depends on
+ *       the integration time, it is 36863 for 100 ms and 65535 for the longer
+ *       ones.
  */
 esp_err_t tsl2591_calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t channel1, float *lux);
 

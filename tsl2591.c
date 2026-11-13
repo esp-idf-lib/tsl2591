@@ -303,9 +303,19 @@ static esp_err_t calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t chann
     // See Adafruit Arduino driver.
     float cpl = (atime * again) / TSL2591_LUX_DF;
 
+    // Both channels are zero in the dark: the light level is zero, not a
+    // division by zero
+    if (!channel0 && !channel1)
+    {
+        ESP_LOGD(TAG, "Both channels are zero, assuming the dark.");
+        *lux = 0.0F;
+        return ESP_OK;
+    }
+
     // The datasheet defines the maximum count for the integration time: 36863
-    // for 100 ms and 65535 for the longer ones. A saturated or an empty channel
-    // cannot be converted into a light level
+    // for 100 ms and 65535 for the longer ones. A saturated channel, or the
+    // infrared channel above a zero channel, cannot be converted into a light
+    // level
     uint16_t max_count = itime == TSL2591_INTEGRATION_100MS ? 36863 : 65535;
     if (!channel0 || channel0 >= max_count || channel1 >= max_count)
     {
