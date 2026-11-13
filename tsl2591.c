@@ -55,6 +55,7 @@ static const char *TAG = "tsl2591";
 #define TSL2591_REG_NPAIHTL 0x0A    // No ALS persist interrupt high threshold low byte
 #define TSL2591_REG_NPAIHTH 0x0B    // No ALS persist interrupt high threshold high byte
 #define TSL2591_REG_PERSIST 0x0C    // Interrupt persistence filter
+#define TSL2591_REG_ID      0x12    // Device ID
 #define TSL2591_REG_C0DATAL 0x14
 #define TSL2591_REG_C0DATAH 0x15
 #define TSL2591_REG_C1DATAL 0x16
@@ -70,6 +71,9 @@ static const char *TAG = "tsl2591";
 #define TSL2591_SPECIAL_CLEAR_INTR      0x06    // Clear ALS interrupt
 #define TSL2591_SPECIAL_CLEAR_BOTH      0x07    // Clear ALS and no persist ALS interrupt
 #define TSL2591_SPECIAL_CLEAR_NP_INTR   0x0A    // Clear no persist ALS interrupt
+
+// TSL2591 device identification.
+#define TSL2591_ID  0x50
 
 // TSL2591 status flags.
 #define TSL2591_STATUS_ALS_INTR     0x10
@@ -191,6 +195,14 @@ esp_err_t tsl2591_init(tsl2591_t *dev)
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
     uint8_t tmp_reg = 0;
+    I2C_DEV_CHECK(&dev->i2c_dev, read_register(dev, TSL2591_REG_ID, &tmp_reg));
+    if (tmp_reg != TSL2591_ID)
+    {
+        I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
+        ESP_LOGE(TAG, "Invalid device ID: 0x%02x", tmp_reg);
+        return ESP_ERR_NOT_FOUND;
+    }
+
     I2C_DEV_CHECK(&dev->i2c_dev, read_enable_register(dev, &tmp_reg));
     dev->settings.enable_reg = tmp_reg;
     ESP_LOGD(TAG, "Initial enable register: %x.", tmp_reg);
