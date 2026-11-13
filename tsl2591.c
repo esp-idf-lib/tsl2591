@@ -31,6 +31,7 @@
  * MIT Licensed as described in the file LICENSE
  */
 
+#include <math.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <esp_log.h>
@@ -54,6 +55,7 @@ static const char *TAG = "tsl2591";
 #define TSL2591_REG_NPAIHTL 0x0A    // No ALS persist interrupt high threshold low byte
 #define TSL2591_REG_NPAIHTH 0x0B    // No ALS persist interrupt high threshold high byte
 #define TSL2591_REG_PERSIST 0x0C    // Interrupt persistence filter
+#define TSL2591_REG_ID      0x12    // Device ID
 #define TSL2591_REG_C0DATAL 0x14
 #define TSL2591_REG_C0DATAH 0x15
 #define TSL2591_REG_C1DATAL 0x16
@@ -69,6 +71,9 @@ static const char *TAG = "tsl2591";
 #define TSL2591_SPECIAL_CLEAR_INTR      0x06    // Clear ALS interrupt
 #define TSL2591_SPECIAL_CLEAR_BOTH      0x07    // Clear ALS and no persist ALS interrupt
 #define TSL2591_SPECIAL_CLEAR_NP_INTR   0x0A    // Clear no persist ALS interrupt
+
+// TSL2591 device identification.
+#define TSL2591_ID  0x50
 
 // TSL2591 status flags.
 #define TSL2591_STATUS_ALS_INTR     0x10
@@ -105,16 +110,26 @@ static inline esp_err_t read_register(tsl2591_t *dev, uint8_t reg, uint8_t *valu
     esp_err_t err;
     err = i2c_dev_read_reg(&dev->i2c_dev,
                            TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | reg, value, 1);
-    ESP_LOGD(TAG, "Red register: 0x%x; Data: 0x%x.", reg, *value);
+    ESP_LOGD(TAG, "Read register: 0x%x; Data: 0x%x.", reg, *value);
     return err;
 }
 
 // Write special function to command register.
 static inline esp_err_t write_special_function(tsl2591_t *dev, uint8_t special_function)
 {
+    // The command register is one byte long: the transaction type and the
+    // special function code are part of it
     uint8_t function = TSL2591_REG_COMMAND | TSL2591_TRANSACTION_SPECIAL | special_function;
     ESP_LOGD(TAG, "Calling special function: 0x%x with 0x%x.", special_function, function);
-    return i2c_dev_write(&dev->i2c_dev, NULL, 0, &function, 8);
+    return i2c_dev_write(&dev->i2c_dev, NULL, 0, &function, 1);
+}
+
+// Write a 16 bit threshold in one transaction.
+static inline esp_err_t write_threshold(tsl2591_t *dev, uint8_t low_register, uint16_t value)
+{
+    uint8_t buf[2] = { value & 0xFF, (uint8_t)(value >> 8) };
+    return i2c_dev_write_reg(&dev->i2c_dev,
+                             TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | low_register, buf, sizeof(buf));
 }
 
 // Read/write enable register.
@@ -141,12 +156,15 @@ static inline esp_err_t read_control_register(tsl2591_t *dev, uint8_t *value)
 
 // Read 16 bit from two consecutive registers.
 // Note that the sensor will shadow for example C0DATAH if C0DATAL is read.
-static inline esp_err_t read_register16(tsl2591_t *dev, uint8_t low_register, uint16_t *value)
+static inline esp_err_t read_channels(tsl2591_t *dev, uint16_t *channel0, uint16_t *channel1)
 {
-    uint8_t buf[2];
+    // The datasheet recommends reading all four ADC bytes in sequence to
+    // minimize the potential for skew between CH0 and CH1 data
+    uint8_t buf[4];
     CHECK(i2c_dev_read_reg(&dev->i2c_dev,
-                           TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | low_register, buf, 2));
-    *value = (uint16_t)buf[1] << 8 | buf[0];
+                           TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | TSL2591_REG_C0DATAL, buf, sizeof(buf)));
+    *channel0 = (uint16_t)buf[1] << 8 | buf[0];
+    *channel1 = (uint16_t)buf[3] << 8 | buf[2];
 
     return ESP_OK;
 }
@@ -185,6 +203,14 @@ esp_err_t tsl2591_init(tsl2591_t *dev)
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
     uint8_t tmp_reg = 0;
+    I2C_DEV_CHECK(&dev->i2c_dev, read_register(dev, TSL2591_REG_ID, &tmp_reg));
+    if (tmp_reg != TSL2591_ID)
+    {
+        I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
+        ESP_LOGE(TAG, "Invalid device ID: 0x%02x", tmp_reg);
+        return ESP_ERR_NOT_FOUND;
+    }
+
     I2C_DEV_CHECK(&dev->i2c_dev, read_enable_register(dev, &tmp_reg));
     dev->settings.enable_reg = tmp_reg;
     ESP_LOGD(TAG, "Initial enable register: %x.", tmp_reg);
@@ -199,15 +225,34 @@ esp_err_t tsl2591_init(tsl2591_t *dev)
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
-    // Wait until the first integration cycle is completed.
     tsl2591_integration_time_t integration_time;
-    ESP_ERROR_CHECK(tsl2591_get_integration_time(dev, &integration_time));
+    CHECK(tsl2591_get_integration_time(dev, &integration_time));
     if (integration_time > TSL2591_INTEGRATION_600MS)
     {
         ESP_LOGE(TAG, "Invalid integration time: %d", integration_time);
         return ESP_ERR_INVALID_STATE;
     }
-    SLEEP_MS(integration_time_ms[integration_time] + 10);
+
+    // The device is powered down after the reset, so nothing is measured until
+    // the power and the ALS are enabled
+    CHECK(tsl2591_set_power_status(dev, TSL2591_POWER_ON));
+    CHECK(tsl2591_set_als_status(dev, TSL2591_ALS_ON));
+
+    // Wait until the first integration cycle is completed, otherwise the data
+    // registers hold the values of the reset
+    bool valid = false;
+    for (size_t i = 0; i < integration_time_ms[integration_time] / 10 + 10; i++)
+    {
+        CHECK(tsl2591_get_als_valid_flag(dev, &valid));
+        if (valid)
+            break;
+        SLEEP_MS(10);
+    }
+    if (!valid)
+    {
+        ESP_LOGE(TAG, "The first integration cycle did not complete");
+        return ESP_ERR_TIMEOUT;
+    }
 
     return ESP_OK;
 }
@@ -216,12 +261,11 @@ esp_err_t tsl2591_init(tsl2591_t *dev)
 // Measure.
 esp_err_t tsl2591_get_channel_data(tsl2591_t *dev, uint16_t *channel0, uint16_t *channel1)
 {
-    CHECK_ARG(dev && channel0 &&  channel1);
+    CHECK_ARG(dev && channel0 && channel1);
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, read_register16(dev, TSL2591_REG_C0DATAL, channel0));
-    I2C_DEV_CHECK(&dev->i2c_dev, read_register16(dev, TSL2591_REG_C1DATAL, channel1));
+    I2C_DEV_CHECK(&dev->i2c_dev, read_channels(dev, channel0, channel1));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
     ESP_LOGD(TAG, "channel0: 0x%x channel1: 0x%x.", *channel0, *channel1);
@@ -229,10 +273,9 @@ esp_err_t tsl2591_get_channel_data(tsl2591_t *dev, uint16_t *channel0, uint16_t 
     return ESP_OK;
 }
 
-esp_err_t tsl2591_calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t channel1, float *lux)
+// Calculate the light intensity. The caller must hold the device mutex.
+static esp_err_t calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t channel1, float *lux)
 {
-    CHECK_ARG(dev && lux);
-
     uint8_t itime = dev->settings.control_reg & 0x07;
     if (itime > TSL2591_INTEGRATION_600MS)
         itime = TSL2591_INTEGRATION_100MS;
@@ -259,9 +302,44 @@ esp_err_t tsl2591_calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t chan
 
     // See Adafruit Arduino driver.
     float cpl = (atime * again) / TSL2591_LUX_DF;
+
+    // Both channels are zero in the dark: the light level is zero, not a
+    // division by zero
+    if (!channel0 && !channel1)
+    {
+        ESP_LOGD(TAG, "Both channels are zero, assuming the dark.");
+        *lux = 0.0F;
+        return ESP_OK;
+    }
+
+    // The datasheet defines the maximum count for the integration time: 36863
+    // for 100 ms and 65535 for the longer ones. A saturated channel, or the
+    // infrared channel above a zero channel, cannot be converted into a light
+    // level
+    uint16_t max_count = itime == TSL2591_INTEGRATION_100MS ? 36863 : 65535;
+    if (!channel0 || channel0 >= max_count || channel1 >= max_count)
+    {
+        ESP_LOGD(TAG, "No valid conversion: channel0 = %u, channel1 = %u.", channel0, channel1);
+        *lux = NAN;
+        return ESP_OK;
+    }
+
     *lux = (((float)channel0 - (float)channel1)) * (1.0F - ((float)channel1 / (float)channel0)) / cpl;
 
     return ESP_OK;
+}
+
+esp_err_t tsl2591_calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t channel1, float *lux)
+{
+    CHECK_ARG(dev && lux);
+
+    I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
+
+    esp_err_t res = calculate_lux(dev, channel0, channel1, lux);
+
+    I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
+
+    return res;
 }
 
 esp_err_t tsl2591_get_lux(tsl2591_t *dev, float *lux)
@@ -269,9 +347,18 @@ esp_err_t tsl2591_get_lux(tsl2591_t *dev, float *lux)
     CHECK_ARG(dev && lux);
 
     uint16_t channel0, channel1;
-    CHECK(tsl2591_get_channel_data(dev, &channel0, &channel1));
 
-    return tsl2591_calculate_lux(dev, channel0, channel1, lux);
+    // The gain and the integration time of the calculation must correspond to
+    // the data that was just read, so the mutex is held until the end
+    I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
+
+    esp_err_t res = read_channels(dev, &channel0, &channel1);
+    if (res == ESP_OK)
+        res = calculate_lux(dev, channel0, channel1, lux);
+
+    I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
+
+    return res;
 }
 
 // Setters and getters enable register.
@@ -332,10 +419,6 @@ esp_err_t tsl2591_set_interrupt(tsl2591_t *dev, tsl2591_interrupt_t interrupt)
     I2C_DEV_CHECK(&dev->i2c_dev,
                   write_enable_register(dev, (dev->settings.enable_reg & ~TSL2591_ALS_INTR_BOTH_ON) | interrupt));
     dev->settings.enable_reg = (dev->settings.enable_reg & ~TSL2591_ALS_INTR_BOTH_ON) | interrupt;
-
-    uint8_t tmp = 0;
-    I2C_DEV_CHECK(&dev->i2c_dev,
-                  read_enable_register(dev, &tmp));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -461,8 +544,7 @@ esp_err_t tsl2591_als_set_low_threshold(tsl2591_t *dev, uint16_t low_threshold)
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_AILTL, low_threshold));
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_AILTH, low_threshold >> 8));
+    I2C_DEV_CHECK(&dev->i2c_dev, write_threshold(dev, TSL2591_REG_AILTL, low_threshold));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -475,8 +557,7 @@ esp_err_t tsl2591_als_set_high_threshold(tsl2591_t *dev, uint16_t high_threshold
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_AIHTL, high_threshold));
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_AIHTH, high_threshold >> 8));
+    I2C_DEV_CHECK(&dev->i2c_dev, write_threshold(dev, TSL2591_REG_AIHTL, high_threshold));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -489,8 +570,7 @@ esp_err_t tsl2591_no_persist_set_low_threshold(tsl2591_t *dev, uint16_t low_thre
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_NPAILTL, low_threshold));
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_NPAILTH, low_threshold >> 8));
+    I2C_DEV_CHECK(&dev->i2c_dev, write_threshold(dev, TSL2591_REG_NPAILTL, low_threshold));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -503,8 +583,7 @@ esp_err_t tsl2591_no_persist_set_high_threshold(tsl2591_t *dev, uint16_t high_th
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_NPAIHTL, high_threshold));
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_NPAIHTH, high_threshold >> 8));
+    I2C_DEV_CHECK(&dev->i2c_dev, write_threshold(dev, TSL2591_REG_NPAIHTL, high_threshold));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 

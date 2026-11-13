@@ -36,6 +36,7 @@
 #ifndef __TSL2591_H__
 #define __TSL2591_H__
 
+#include <stdbool.h>
 #include <i2cdev.h>
 #include <esp_err.h>
 
@@ -167,8 +168,15 @@ esp_err_t tsl2591_free_desc(tsl2591_t *dev);
 /**
  * @brief Initialize device
  *
+ * Verifies the device identification, enables the power and the ALS, and waits
+ * until the first integration cycle is completed, so the data can be read
+ * right after the call.
+ *
  * @param dev Device descriptor
  * @return `ESP_OK` on success
+ * @return `ESP_ERR_NOT_FOUND` if the device identification does not match
+ * @return `ESP_ERR_INVALID_STATE` if the integration time is not valid
+ * @return `ESP_ERR_TIMEOUT` if the first integration cycle did not complete
  */
 esp_err_t tsl2591_init(tsl2591_t *dev);
 
@@ -178,6 +186,7 @@ esp_err_t tsl2591_init(tsl2591_t *dev);
  * @param dev Device descriptor
  * @param[out] channel0 Channel 0 data
  * @param[out] channel1 Channel 1 data
+ * @return `ESP_OK` on success
  */
 esp_err_t tsl2591_get_channel_data(tsl2591_t *dev, uint16_t *channel0, uint16_t *channel1);
 
@@ -189,6 +198,12 @@ esp_err_t tsl2591_get_channel_data(tsl2591_t *dev, uint16_t *channel0, uint16_t 
  * @param channel1 Channel1 data
  * @param[out] lux Light intensity
  * @return `ESP_OK` on success
+ *
+ * @note The light intensity is zero if both channels are zero, which is the
+ *       case in the dark. It is NaN if channel 0 is zero while channel 1 is
+ *       not, or if either channel is saturated: the maximum count depends on
+ *       the integration time, it is 36863 for 100 ms and 65535 for the longer
+ *       ones.
  */
 esp_err_t tsl2591_calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t channel1, float *lux);
 
@@ -196,8 +211,8 @@ esp_err_t tsl2591_calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t chan
  * @brief Get and calculate light intensity
  *
  * @param dev Device descriptor
- * @param[out] lux Light intensity
- * @return `ESP_OK`
+ * @param[out] lux Light intensity, or NaN if the conversion is not valid
+ * @return `ESP_OK` on success
  */
 esp_err_t tsl2591_get_lux(tsl2591_t *dev, float *lux);
 
@@ -364,12 +379,16 @@ esp_err_t tsl2591_no_persist_set_low_threshold(tsl2591_t *dev, uint16_t low_thre
 esp_err_t tsl2591_no_persist_set_high_threshold(tsl2591_t *dev, uint16_t high_threshold);
 
 /**
- * @brief Set interrupt
+ * @brief Force an interrupt
  *
- * At least on interrupt must be enabled.
+ * The function is meant for testing the interrupt wiring: it sets the
+ * interrupt bits of the status register as if the threshold condition had
+ * been met. At least one interrupt must be enabled for the interrupt to be
+ * visible on the INT pin. A forced interrupt must be cleared with one of the
+ * clear functions.
  *
  * @param dev Device descriptor
- * @return `ESP_PK` on success
+ * @return `ESP_OK` on success
  */
 esp_err_t tsl2591_set_test_intr(tsl2591_t *dev);
 
