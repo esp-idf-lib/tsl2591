@@ -364,12 +364,16 @@ esp_err_t tsl2591_no_persist_set_low_threshold(tsl2591_t *dev, uint16_t low_thre
 esp_err_t tsl2591_no_persist_set_high_threshold(tsl2591_t *dev, uint16_t high_threshold);
 
 /**
- * @brief Set interrupt
+ * @brief Force an interrupt
  *
- * At least on interrupt must be enabled.
+ * The function is meant for testing the interrupt wiring: it sets the
+ * interrupt bits of the status register as if the threshold condition had
+ * been met. At least one interrupt must be enabled for the interrupt to be
+ * visible on the INT pin. A forced interrupt must be cleared with one of the
+ * clear functions.
  *
  * @param dev Device descriptor
- * @return `ESP_PK` on success
+ * @return `ESP_OK` on success
  */
 esp_err_t tsl2591_set_test_intr(tsl2591_t *dev);
 
