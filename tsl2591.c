@@ -124,6 +124,14 @@ static inline esp_err_t write_special_function(tsl2591_t *dev, uint8_t special_f
     return i2c_dev_write(&dev->i2c_dev, NULL, 0, &function, 1);
 }
 
+// Write a 16 bit threshold in one transaction.
+static inline esp_err_t write_threshold(tsl2591_t *dev, uint8_t low_register, uint16_t value)
+{
+    uint8_t buf[2] = { value & 0xFF, (uint8_t)(value >> 8) };
+    return i2c_dev_write_reg(&dev->i2c_dev,
+                             TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | low_register, buf, sizeof(buf));
+}
+
 // Read/write enable register.
 static inline esp_err_t write_enable_register(tsl2591_t *dev, uint8_t value)
 {
@@ -526,8 +534,7 @@ esp_err_t tsl2591_als_set_low_threshold(tsl2591_t *dev, uint16_t low_threshold)
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_AILTL, low_threshold));
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_AILTH, low_threshold >> 8));
+    I2C_DEV_CHECK(&dev->i2c_dev, write_threshold(dev, TSL2591_REG_AILTL, low_threshold));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -540,8 +547,7 @@ esp_err_t tsl2591_als_set_high_threshold(tsl2591_t *dev, uint16_t high_threshold
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_AIHTL, high_threshold));
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_AIHTH, high_threshold >> 8));
+    I2C_DEV_CHECK(&dev->i2c_dev, write_threshold(dev, TSL2591_REG_AIHTL, high_threshold));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -554,8 +560,7 @@ esp_err_t tsl2591_no_persist_set_low_threshold(tsl2591_t *dev, uint16_t low_thre
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_NPAILTL, low_threshold));
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_NPAILTH, low_threshold >> 8));
+    I2C_DEV_CHECK(&dev->i2c_dev, write_threshold(dev, TSL2591_REG_NPAILTL, low_threshold));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
@@ -568,8 +573,7 @@ esp_err_t tsl2591_no_persist_set_high_threshold(tsl2591_t *dev, uint16_t high_th
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_NPAIHTL, high_threshold));
-    I2C_DEV_CHECK(&dev->i2c_dev, write_register(dev, TSL2591_REG_NPAIHTH, high_threshold >> 8));
+    I2C_DEV_CHECK(&dev->i2c_dev, write_threshold(dev, TSL2591_REG_NPAIHTL, high_threshold));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
