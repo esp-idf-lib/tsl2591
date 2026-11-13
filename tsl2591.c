@@ -31,6 +31,7 @@
  * MIT Licensed as described in the file LICENSE
  */
 
+#include <math.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <esp_log.h>
@@ -261,6 +262,18 @@ esp_err_t tsl2591_calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t chan
 
     // See Adafruit Arduino driver.
     float cpl = (atime * again) / TSL2591_LUX_DF;
+
+    // The datasheet defines the maximum count for the integration time: 36863
+    // for 100 ms and 65535 for the longer ones. A saturated or an empty channel
+    // cannot be converted into a light level
+    uint16_t max_count = itime == TSL2591_INTEGRATION_100MS ? 36863 : 65535;
+    if (!channel0 || channel0 >= max_count || channel1 >= max_count)
+    {
+        ESP_LOGD(TAG, "No valid conversion: channel0 = %u, channel1 = %u.", channel0, channel1);
+        *lux = NAN;
+        return ESP_OK;
+    }
+
     *lux = (((float)channel0 - (float)channel1)) * (1.0F - ((float)channel1 / (float)channel0)) / cpl;
 
     return ESP_OK;
