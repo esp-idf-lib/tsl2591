@@ -207,7 +207,7 @@ esp_err_t tsl2591_init(tsl2591_t *dev)
 
     // Wait until the first integration cycle is completed.
     tsl2591_integration_time_t integration_time;
-    ESP_ERROR_CHECK(tsl2591_get_integration_time(dev, &integration_time));
+    CHECK(tsl2591_get_integration_time(dev, &integration_time));
     if (integration_time > TSL2591_INTEGRATION_600MS)
     {
         ESP_LOGE(TAG, "Invalid integration time: %d", integration_time);
