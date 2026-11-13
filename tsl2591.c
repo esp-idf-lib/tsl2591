@@ -112,9 +112,11 @@ static inline esp_err_t read_register(tsl2591_t *dev, uint8_t reg, uint8_t *valu
 // Write special function to command register.
 static inline esp_err_t write_special_function(tsl2591_t *dev, uint8_t special_function)
 {
+    // The command register is one byte long: the transaction type and the
+    // special function code are part of it
     uint8_t function = TSL2591_REG_COMMAND | TSL2591_TRANSACTION_SPECIAL | special_function;
     ESP_LOGD(TAG, "Calling special function: 0x%x with 0x%x.", special_function, function);
-    return i2c_dev_write(&dev->i2c_dev, NULL, 0, &function, 8);
+    return i2c_dev_write(&dev->i2c_dev, NULL, 0, &function, 1);
 }
 
 // Read/write enable register.
