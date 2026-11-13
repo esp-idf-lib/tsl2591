@@ -265,10 +265,9 @@ esp_err_t tsl2591_get_channel_data(tsl2591_t *dev, uint16_t *channel0, uint16_t 
     return ESP_OK;
 }
 
-esp_err_t tsl2591_calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t channel1, float *lux)
+// Calculate the light intensity. The caller must hold the device mutex.
+static esp_err_t calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t channel1, float *lux)
 {
-    CHECK_ARG(dev && lux);
-
     uint8_t itime = dev->settings.control_reg & 0x07;
     if (itime > TSL2591_INTEGRATION_600MS)
         itime = TSL2591_INTEGRATION_100MS;
@@ -312,14 +311,36 @@ esp_err_t tsl2591_calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t chan
     return ESP_OK;
 }
 
+esp_err_t tsl2591_calculate_lux(tsl2591_t *dev, uint16_t channel0, uint16_t channel1, float *lux)
+{
+    CHECK_ARG(dev && lux);
+
+    I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
+
+    esp_err_t res = calculate_lux(dev, channel0, channel1, lux);
+
+    I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
+
+    return res;
+}
+
 esp_err_t tsl2591_get_lux(tsl2591_t *dev, float *lux)
 {
     CHECK_ARG(dev && lux);
 
     uint16_t channel0, channel1;
-    CHECK(tsl2591_get_channel_data(dev, &channel0, &channel1));
 
-    return tsl2591_calculate_lux(dev, channel0, channel1, lux);
+    // The gain and the integration time of the calculation must correspond to
+    // the data that was just read, so the mutex is held until the end
+    I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
+
+    esp_err_t res = read_channels(dev, &channel0, &channel1);
+    if (res == ESP_OK)
+        res = calculate_lux(dev, channel0, channel1, lux);
+
+    I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
+
+    return res;
 }
 
 // Setters and getters enable register.
