@@ -369,10 +369,6 @@ esp_err_t tsl2591_set_interrupt(tsl2591_t *dev, tsl2591_interrupt_t interrupt)
                   write_enable_register(dev, (dev->settings.enable_reg & ~TSL2591_ALS_INTR_BOTH_ON) | interrupt));
     dev->settings.enable_reg = (dev->settings.enable_reg & ~TSL2591_ALS_INTR_BOTH_ON) | interrupt;
 
-    uint8_t tmp = 0;
-    I2C_DEV_CHECK(&dev->i2c_dev,
-                  read_enable_register(dev, &tmp));
-
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
     return ESP_OK;
