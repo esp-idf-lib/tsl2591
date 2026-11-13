@@ -205,7 +205,6 @@ esp_err_t tsl2591_init(tsl2591_t *dev)
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
 
-    // Wait until the first integration cycle is completed.
     tsl2591_integration_time_t integration_time;
     CHECK(tsl2591_get_integration_time(dev, &integration_time));
     if (integration_time > TSL2591_INTEGRATION_600MS)
@@ -213,7 +212,27 @@ esp_err_t tsl2591_init(tsl2591_t *dev)
         ESP_LOGE(TAG, "Invalid integration time: %d", integration_time);
         return ESP_ERR_INVALID_STATE;
     }
-    SLEEP_MS(integration_time_ms[integration_time] + 10);
+
+    // The device is powered down after the reset, so nothing is measured until
+    // the power and the ALS are enabled
+    CHECK(tsl2591_set_power_status(dev, TSL2591_POWER_ON));
+    CHECK(tsl2591_set_als_status(dev, TSL2591_ALS_ON));
+
+    // Wait until the first integration cycle is completed, otherwise the data
+    // registers hold the values of the reset
+    bool valid = false;
+    for (int i = 0; i < integration_time_ms[integration_time] / 10 + 10; i++)
+    {
+        CHECK(tsl2591_get_als_valid_flag(dev, &valid));
+        if (valid)
+            break;
+        SLEEP_MS(10);
+    }
+    if (!valid)
+    {
+        ESP_LOGE(TAG, "The first integration cycle did not complete");
+        return ESP_ERR_TIMEOUT;
+    }
 
     return ESP_OK;
 }
