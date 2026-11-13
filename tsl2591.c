@@ -144,12 +144,15 @@ static inline esp_err_t read_control_register(tsl2591_t *dev, uint8_t *value)
 
 // Read 16 bit from two consecutive registers.
 // Note that the sensor will shadow for example C0DATAH if C0DATAL is read.
-static inline esp_err_t read_register16(tsl2591_t *dev, uint8_t low_register, uint16_t *value)
+static inline esp_err_t read_channels(tsl2591_t *dev, uint16_t *channel0, uint16_t *channel1)
 {
-    uint8_t buf[2];
+    // The datasheet recommends reading all four ADC bytes in sequence to
+    // minimize the potential for skew between CH0 and CH1 data
+    uint8_t buf[4];
     CHECK(i2c_dev_read_reg(&dev->i2c_dev,
-                           TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | low_register, buf, 2));
-    *value = (uint16_t)buf[1] << 8 | buf[0];
+                           TSL2591_REG_COMMAND | TSL2591_TRANSACTION_NORMAL | TSL2591_REG_C0DATAL, buf, sizeof(buf)));
+    *channel0 = (uint16_t)buf[1] << 8 | buf[0];
+    *channel1 = (uint16_t)buf[3] << 8 | buf[2];
 
     return ESP_OK;
 }
@@ -219,12 +222,11 @@ esp_err_t tsl2591_init(tsl2591_t *dev)
 // Measure.
 esp_err_t tsl2591_get_channel_data(tsl2591_t *dev, uint16_t *channel0, uint16_t *channel1)
 {
-    CHECK_ARG(dev && channel0 &&  channel1);
+    CHECK_ARG(dev && channel0 && channel1);
 
     I2C_DEV_TAKE_MUTEX(&dev->i2c_dev);
 
-    I2C_DEV_CHECK(&dev->i2c_dev, read_register16(dev, TSL2591_REG_C0DATAL, channel0));
-    I2C_DEV_CHECK(&dev->i2c_dev, read_register16(dev, TSL2591_REG_C1DATAL, channel1));
+    I2C_DEV_CHECK(&dev->i2c_dev, read_channels(dev, channel0, channel1));
 
     I2C_DEV_GIVE_MUTEX(&dev->i2c_dev);
     ESP_LOGD(TAG, "channel0: 0x%x channel1: 0x%x.", *channel0, *channel1);
