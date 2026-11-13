@@ -241,7 +241,7 @@ esp_err_t tsl2591_init(tsl2591_t *dev)
     // Wait until the first integration cycle is completed, otherwise the data
     // registers hold the values of the reset
     bool valid = false;
-    for (int i = 0; i < integration_time_ms[integration_time] / 10 + 10; i++)
+    for (size_t i = 0; i < integration_time_ms[integration_time] / 10 + 10; i++)
     {
         CHECK(tsl2591_get_als_valid_flag(dev, &valid));
         if (valid)

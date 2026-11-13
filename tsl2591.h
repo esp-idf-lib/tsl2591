@@ -36,6 +36,7 @@
 #ifndef __TSL2591_H__
 #define __TSL2591_H__
 
+#include <stdbool.h>
 #include <i2cdev.h>
 #include <esp_err.h>
 
